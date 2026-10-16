@@ -1,0 +1,14 @@
+{
+  "name": "smartrender-tauri",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SmartRender em Rust + Tauri: mede GPU e CPU no seu vídeo e escolhe a melhor forma de converter",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

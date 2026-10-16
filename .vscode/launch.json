@@ -1,0 +1,16 @@
+{
+  // F5 compila e abre o app com o depurador: clique à esquerda do número da linha
+  // em qualquer arquivo .rs para criar um ponto de parada (breakpoint).
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Depurar o SmartRender (Rust)",
+      "cargo": {
+        "args": ["build", "--manifest-path=./src-tauri/Cargo.toml"]
+      },
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

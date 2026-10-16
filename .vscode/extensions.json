@@ -1,0 +1,9 @@
+{
+  // O VS Code oferece instalar estas extensões ao abrir a pasta.
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "tauri-apps.tauri-vscode",
+    "vadimcn.vscode-lldb",
+    "tamasfe.even-better-toml"
+  ]
+}

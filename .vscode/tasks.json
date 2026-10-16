@@ -1,0 +1,34 @@
+{
+  // Menu: Terminal > Executar Tarefa...
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Rodar o app (tauri dev)",
+      "type": "shell",
+      "command": "npm run dev",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "Rodar os testes (cargo test)",
+      "type": "shell",
+      "command": "cargo test",
+      "options": { "cwd": "${workspaceFolder}/src-tauri" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "Verificar o código (cargo clippy)",
+      "type": "shell",
+      "command": "cargo clippy",
+      "options": { "cwd": "${workspaceFolder}/src-tauri" },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "Gerar instalador (tauri build)",
+      "type": "shell",
+      "command": "npm run build",
+      "problemMatcher": ["$rustc"]
+    }
+  ]
+}
