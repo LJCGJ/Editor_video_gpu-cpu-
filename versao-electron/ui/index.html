@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>SmartRender</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+      <div>
+        <h1>SmartRender</h1>
+        <p>Mede GPU e CPU no seu próprio vídeo e escolhe a forma mais inteligente de converter.</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. Hardware -->
+    <section class="card" id="hw-card">
+      <div class="card-head">
+        <span class="step">1</span>
+        <h2>Seu computador</h2>
+        <span class="muted" id="ffmpeg-version"></span>
+      </div>
+      <div id="hw-body" class="hw-body">
+        <div class="loading"><span class="spinner"></span> Detectando processador, placa de vídeo e codificadores…</div>
+      </div>
+    </section>
+
+    <!-- 2. Vídeo -->
+    <section class="card" id="video-card">
+      <div class="card-head">
+        <span class="step">2</span>
+        <h2>Vídeo</h2>
+      </div>
+      <div id="drop" class="drop" tabindex="0" role="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <div><strong>Arraste um vídeo aqui</strong> ou clique para escolher</div>
+        <div class="muted">MP4, MOV, MKV, AVI, WEBM, MTS…</div>
+      </div>
+      <div id="video-body" hidden></div>
+    </section>
+
+    <!-- 3. Objetivo -->
+    <section class="card" id="goal-card" hidden>
+      <div class="card-head">
+        <span class="step">3</span>
+        <h2>O que é mais importante para você?</h2>
+      </div>
+      <div class="goals" role="radiogroup">
+        <button class="goal selected" data-goal="speed" role="radio" aria-checked="true">
+          <span class="goal-icon">⚡</span><strong>Mais rápido</strong><span>Terminar logo, qualidade boa</span>
+        </button>
+        <button class="goal" data-goal="quality" role="radio" aria-checked="false">
+          <span class="goal-icon">✨</span><strong>Melhor qualidade</strong><span>Para o resultado final, sem pressa</span>
+        </button>
+        <button class="goal" data-goal="size" role="radio" aria-checked="false">
+          <span class="goal-icon">📦</span><strong>Arquivo menor</strong><span>Para enviar ou guardar</span>
+        </button>
+      </div>
+      <div class="row">
+        <label class="field">
+          <span>Formato de saída</span>
+          <select id="codec">
+            <option value="h264">H.264 · toca em qualquer aparelho</option>
+            <option value="hevc">H.265 / HEVC · arquivo ~40% menor</option>
+            <option value="av1">AV1 · o mais moderno e eficiente</option>
+          </select>
+        </label>
+        <button id="analyze" class="primary">Analisar o meu vídeo</button>
+      </div>
+      <p class="muted small">A análise codifica um trecho de 5 segundos do seu vídeo com cada opção disponível e mede tempo, qualidade e tamanho de verdade.</p>
+    </section>
+
+    <!-- 4. Resultado -->
+    <section class="card" id="bench-card" hidden>
+      <div class="card-head">
+        <span class="step">4</span>
+        <h2>Resultado da análise</h2>
+      </div>
+      <div id="bench-progress" class="progress-block" hidden>
+        <div class="progress"><div class="bar" id="bench-bar"></div></div>
+        <div class="muted" id="bench-label">Preparando…</div>
+      </div>
+      <div id="bench-body"></div>
+    </section>
+
+    <!-- 5. Conversão -->
+    <section class="card" id="conv-card" hidden>
+      <div class="card-head">
+        <span class="step">5</span>
+        <h2>Converter</h2>
+      </div>
+      <div class="row out-row">
+        <label class="field grow">
+          <span>Salvar como</span>
+          <input id="out-path" type="text" spellcheck="false">
+        </label>
+        <button id="choose-out" class="ghost">Alterar…</button>
+      </div>
+      <div class="row">
+        <button id="convert" class="primary big">Converter agora</button>
+        <span class="muted" id="convert-hint"></span>
+      </div>
+      <div id="conv-progress" class="progress-block" hidden>
+        <div class="progress big"><div class="bar" id="conv-bar"></div></div>
+        <div class="conv-stats">
+          <span id="conv-pct">0%</span>
+          <span id="conv-stage" class="muted"></span>
+          <span id="conv-fps" class="muted"></span>
+          <span id="conv-eta" class="muted"></span>
+          <button id="cancel" class="ghost danger">Cancelar</button>
+        </div>
+      </div>
+      <div id="conv-result"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "smartrender",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Conversor de vídeo que mede GPU e CPU e escolhe a melhor forma de processar cada vídeo",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "package": "npx --yes @electron/packager@18 . SmartRender --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=build/icon.ico --app-version=0.1.0 --win32metadata.ProductName=SmartRender --ignore=^/dist --ignore=^/installer --ignore=^/src-tauri --ignore=\\.md$",
+    "installer": "npm run package && \"C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe\" /Qp installer\\smartrender.iss"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0"
+  }
+}

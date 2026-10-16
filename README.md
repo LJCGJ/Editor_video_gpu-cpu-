@@ -1,10 +1,54 @@
-# SmartRender (versão Rust + Tauri)
+# SmartRender
 
 Conversor de vídeo que **mede** GPU e CPU no seu próprio vídeo e escolhe a melhor forma de processar:
 só GPU, só CPU, ou as duas ao mesmo tempo, e explica o porquê.
 
-É a mesma aplicação da versão Electron, com o backend reescrito em **Rust**. A interface (`ui/`) é a mesma;
-só muda a ponte `ui/bridge-tauri.js`, que conversa com o Rust em vez do Node.
+## ⬇️ Download
+
+Baixe o instalador **`SmartRender-Setup-0.1.0.exe`** na página de
+[**Releases**](https://github.com/LJCGJ/Editor_video_gpu-cpu-/releases/latest).
+
+- Instala só para o seu usuário, sem pedir senha de administrador.
+- O instalador não tem assinatura digital, então o Windows pode mostrar *"O Windows protegeu o computador"*.
+  Clique em **Mais informações → Executar assim mesmo**.
+- Precisa do **FFmpeg** instalado: `winget install Gyan.FFmpeg`. O instalador avisa se não encontrar.
+
+## 💻 Sistemas compatíveis
+
+| Sistema | Compatível? | Observação |
+|---|---|---|
+| **Windows 11** (64 bits) | ✅ Sim | Recomendado |
+| **Windows 10** (64 bits) | ✅ Sim | |
+| Windows 11 em ARM (Snapdragon) | ⚠️ Não testado | Roda por emulação x64; sem aceleração Quick Sync/NVENC/AMF |
+| Windows 8.1 / 8 / 7 | ❌ Não | O Electron (versão do instalador) e o Tauri exigem Windows 10 ou mais novo. O instalador recusa a instalação nessas versões. |
+| Windows 32 bits | ❌ Não | |
+| macOS / Linux | ❌ Não, por enquanto | O código usa recursos do Windows (D3D11) para testar a decodificação pela GPU |
+
+### Placas de vídeo (aceleração por GPU)
+
+O app detecta sozinho o que funciona no seu computador. Sem GPU compatível, tudo é feito pela CPU.
+
+| Fabricante | Tecnologia | H.264 | H.265 / HEVC | AV1 |
+|---|---|---|---|---|
+| **Intel** (gráficos integrados ou Arc) | Quick Sync | 2ª geração Core em diante | 6ª geração Core em diante | Arc e Core Ultra |
+| **NVIDIA** GeForce / RTX | NVENC | GTX 600 em diante | GTX 900 em diante | RTX 40 em diante |
+| **AMD** Radeon | AMF | RX 400 em diante | RX 400 em diante | RX 7000 em diante |
+
+Requisitos mínimos sugeridos: processador de 4 núcleos, 8 GB de RAM e drivers de vídeo atualizados.
+
+## As duas versões deste repositório
+
+| Pasta | Tecnologia | Situação |
+|---|---|---|
+| [`versao-electron/`](versao-electron/) | JavaScript + Node.js + Electron | ✅ Testada de ponta a ponta. **É a que gera o instalador.** |
+| Raiz (`src-tauri/` + `ui/`) | **Rust** + Tauri | Mesma lógica, para estudo. Ainda não compilada (veja o aviso abaixo). |
+
+A interface (`ui/`) é a mesma nas duas versões; só muda a ponte com o backend
+(`preload.js` no Electron, `ui/bridge-tauri.js` no Tauri).
+
+---
+
+# Versão Rust + Tauri
 
 > ⚠️ Este código **não foi compilado na máquina onde foi escrito**: o antivírus corporativo (Panda) bloqueia
 > os executáveis que o `cargo` gera durante a compilação. A lógica é a mesma da versão Electron, que foi testada
