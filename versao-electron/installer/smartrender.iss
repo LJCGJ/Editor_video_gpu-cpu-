@@ -3,7 +3,7 @@
 ; Compilar: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\smartrender.iss
 
 #define AppName "SmartRender"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 #define AppExe "SmartRender.exe"
 #define AppDir "..\dist\SmartRender-win32-x64"
 

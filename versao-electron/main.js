@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const hardware = require("./src/hardware");
 const probe = require("./src/probe");
 const benchmark = require("./src/benchmark");
+const join = require("./src/join");
 const { Converter, defaultOutputPath } = require("./src/convert");
 
 let win;
@@ -23,7 +24,19 @@ function handle(channel, fn) {
 
 handle("detect-hardware", async () => (hw = await hardware.detect()));
 handle("analyze-video", (file) => probe.analyze(file));
-handle("default-output-path", (file) => defaultOutputPath(file));
+handle("default-output-path", (file, suffix) => defaultOutputPath(file, suffix));
+handle("plan-join", ({ clips, codec, goal }) => {
+  if (!hw) throw new Error("O hardware ainda não foi detectado.");
+  return join.plan(hw, clips, codec, goal, (p) => send("benchmark-progress", p));
+});
+handle("start-join", ({ clips, plan, goal, outPath }) => converter.startJoin(clips, plan, goal, outPath));
+handle("open-videos", async (extensions) => {
+  const r = await dialog.showOpenDialog(win, {
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Vídeos", extensions }],
+  });
+  return r.canceled ? [] : r.filePaths;
+});
 handle("run-benchmark", ({ video, codec, goal }) => {
   if (!hw) throw new Error("O hardware ainda não foi detectado.");
   return benchmark.run(hw, video, codec, goal, (p) => send("benchmark-progress", p));

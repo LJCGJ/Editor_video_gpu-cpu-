@@ -70,8 +70,15 @@ function decodeArgs(hwDecode) {
 
 /** Argumentos de vídeo (depois do `-i`). Sempre gera 8-bit 4:2:0 para tocar em qualquer aparelho. */
 function videoArgs(e, goal, forMp4) {
-  const fmt = e.device === "gpu" ? "format=nv12" : "format=yuv420p";
-  const a = ["-vf", fmt, "-c:v", e.name, ...tuning(e, goal)];
+  return ["-vf", pixelFormat(e), ...codecArgs(e, goal, forMp4)];
+}
+
+/** Formato de pixel que cada tipo de codificador aceita direto (sem conversão extra). */
+const pixelFormat = (e) => (e.device === "gpu" ? "format=nv12" : "format=yuv420p");
+
+/** Só o codificador e seus parâmetros, para quando os filtros vêm de um -filter_complex. */
+function codecArgs(e, goal, forMp4) {
+  const a = ["-c:v", e.name, ...tuning(e, goal)];
   if (e.codec === "hevc" && forMp4) a.push("-tag:v", "hvc1");
   return a;
 }
@@ -81,4 +88,4 @@ function audioArgs(audioCodec) {
   return audioCodec === "aac" || audioCodec === "mp3" ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "192k"];
 }
 
-module.exports = { ENCODERS, find, decodeArgs, videoArgs, audioArgs };
+module.exports = { ENCODERS, find, decodeArgs, videoArgs, codecArgs, pixelFormat, audioArgs };

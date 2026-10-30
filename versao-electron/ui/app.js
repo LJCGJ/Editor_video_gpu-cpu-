@@ -1,11 +1,15 @@
 // `api` é exposto pelo preload.js (window.api).
 
 const state = {
+  mode: "convert", // "convert" (um vídeo) ou "join" (juntar vários)
   hw: null,
   video: null,
+  clips: [],
+  loadingClips: false,
   goal: "speed",
   codec: "h264",
   bench: null,
+  plan: null,
   selectedId: null,
   converting: false,
 };
@@ -13,6 +17,29 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const VIDEO_EXT = ["mp4", "mov", "mkv", "avi", "webm", "m4v", "mts", "m2ts", "wmv", "flv", "mpg", "mpeg", "ts", "3gp"];
 const CODEC_NAMES = { h264: "H.264", hevc: "H.265", av1: "AV1" };
+const isVideo = (path) => VIDEO_EXT.includes(path.split(".").pop().toLowerCase());
+
+/** Textos que mudam conforme o modo. */
+const TEXTS = {
+  convert: {
+    video: "Vídeo",
+    drop: "Arraste um vídeo aqui",
+    analyze: "Analisar o meu vídeo",
+    hint: "A análise codifica um trecho de 5 segundos do seu vídeo com cada opção disponível e mede tempo, qualidade e tamanho de verdade.",
+    bench: "Resultado da análise",
+    conv: "Converter",
+    button: "Converter agora",
+  },
+  join: {
+    video: "Vídeos para juntar",
+    drop: "Arraste vários vídeos aqui",
+    analyze: "Planejar a junção",
+    hint: "Se todos os vídeos tiverem o mesmo formato, eles são emendados direto, sem perder qualidade. Se não, o app testa GPU e CPU no vídeo mais longo e escolhe a melhor forma de recodificar.",
+    bench: "Plano da junção",
+    conv: "Juntar",
+    button: "Juntar agora",
+  },
+};
 
 // ---------- formatação ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -90,11 +117,127 @@ function renderHardware() {
   }
 }
 
+// ---------- modo ----------
+function setMode(mode) {
+  if (state.converting || state.loadingClips || mode === state.mode) return;
+  state.mode = mode;
+  document.querySelectorAll(".mode").forEach((b) => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle("selected", on);
+    b.setAttribute("aria-selected", on);
+  });
+  const t = TEXTS[mode];
+  $("video-title").textContent = t.video;
+  $("drop-title").textContent = t.drop;
+  $("analyze").textContent = t.analyze;
+  $("analyze-hint").textContent = t.hint;
+  $("bench-title").textContent = t.bench;
+  $("conv-title").textContent = t.conv;
+  $("convert").textContent = t.button;
+  $("video-body").hidden = mode !== "convert" || !$("video-body").innerHTML;
+  $("join-body").hidden = mode !== "join" || !state.clips.length;
+  $("drop").classList.toggle("compact", mode === "convert" ? !!state.video : state.clips.length > 0);
+  resetBench();
+  refreshGoalCard();
+  updateDefaultOutput();
+}
+
+/** O passo 3 aparece quando há o que analisar: um vídeo, ou pelo menos dois para juntar. */
+function refreshGoalCard() {
+  $("goal-card").hidden = state.mode === "convert" ? !state.video : state.clips.length < 2;
+}
+
+async function updateDefaultOutput() {
+  const first = state.mode === "convert" ? state.video : state.clips[0];
+  if (first) $("out-path").value = await api.defaultOutputPath(first.path, state.mode === "join" ? "juncao" : undefined);
+}
+
 // ---------- 2. vídeo ----------
 async function pickFile() {
-  if (state.converting) return;
+  if (state.converting || state.loadingClips) return;
+  if (state.mode === "join") {
+    const paths = await api.openVideos(VIDEO_EXT);
+    if (paths.length) addClips(paths);
+    return;
+  }
   const path = await api.openVideo(VIDEO_EXT);
   if (path) loadVideo(path);
+}
+
+// ---------- 2b. vídeos para juntar ----------
+async function addClips(paths) {
+  const valid = paths.filter(isVideo);
+  if (valid.length < paths.length) toast("Alguns arquivos foram ignorados porque não parecem ser vídeos.");
+  if (!valid.length) return;
+  state.loadingClips = true;
+  resetBench();
+  const errors = [];
+  for (const [i, path] of valid.entries()) {
+    renderClips(`Analisando ${i + 1} de ${valid.length}: ${path.split(/[\\/]/).pop()}…`);
+    try {
+      state.clips.push(await api.analyzeVideo(path));
+    } catch (e) {
+      errors.push(`${path.split(/[\\/]/).pop()}: ${e}`);
+    }
+  }
+  state.loadingClips = false;
+  renderClips();
+  if (errors.length) toast(`Não consegui ler: ${errors.join(" · ")}`);
+  $("drop").classList.toggle("compact", state.clips.length > 0);
+  refreshGoalCard();
+  updateDefaultOutput();
+}
+
+function moveClip(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= state.clips.length) return;
+  [state.clips[i], state.clips[j]] = [state.clips[j], state.clips[i]];
+  afterClipsChanged();
+}
+
+function removeClip(i) {
+  state.clips.splice(i, 1);
+  afterClipsChanged();
+}
+
+function afterClipsChanged() {
+  resetBench();
+  renderClips();
+  refreshGoalCard();
+  updateDefaultOutput();
+  $("drop").classList.toggle("compact", state.clips.length > 0);
+}
+
+function renderClips(loading = "") {
+  const body = $("join-body");
+  body.hidden = !state.clips.length && !loading;
+  const total = state.clips.reduce((s, c) => s + c.duration, 0);
+  const locked = state.converting || state.loadingClips;
+  const rows = state.clips.map((c, i) => {
+    const facts = [
+      `${c.width}×${c.height}`,
+      `${dec(c.fps, c.fps % 1 ? 2 : 0)} fps`,
+      c.codec.toUpperCase(),
+      fmtDur(c.duration),
+      c.audioCodec ? `áudio ${c.audioCodec.toUpperCase()}` : "sem áudio",
+    ].join(" · ");
+    return `
+      <li class="clip">
+        <span class="clip-n">${i + 1}</span>
+        <div class="clip-info"><div class="clip-name">${esc(c.fileName)}</div><div class="muted">${esc(facts)}</div></div>
+        <div class="clip-actions">
+          <button class="icon" data-action="up" data-i="${i}" title="Subir" aria-label="Subir" ${i === 0 || locked ? "disabled" : ""}>↑</button>
+          <button class="icon" data-action="down" data-i="${i}" title="Descer" aria-label="Descer" ${i === state.clips.length - 1 || locked ? "disabled" : ""}>↓</button>
+          <button class="icon danger" data-action="remove" data-i="${i}" title="Remover" aria-label="Remover" ${locked ? "disabled" : ""}>✕</button>
+        </div>
+      </li>`;
+  });
+  const footer = loading
+    ? `<div class="loading"><span class="spinner"></span> ${esc(loading)}</div>`
+    : state.clips.length < 2
+      ? `<p class="muted small">Adicione pelo menos mais um vídeo para juntar.</p>`
+      : `<p class="muted small">${state.clips.length} vídeos · duração total ${fmtDur(total)}. Eles serão juntados nesta ordem; use ↑ ↓ para mudar.</p>`;
+  body.innerHTML = `<ol class="clip-list">${rows.join("")}</ol>${footer}`;
 }
 
 async function loadVideo(path) {
@@ -155,6 +298,7 @@ function selectGoal(goal) {
 
 function resetBench() {
   state.bench = null;
+  state.plan = null;
   state.selectedId = null;
   $("bench-card").hidden = true;
   $("conv-card").hidden = true;
@@ -162,16 +306,22 @@ function resetBench() {
 }
 
 // ---------- 4. benchmark ----------
-async function analyze() {
-  if (!state.video || !state.hw) return;
+function startAnalysisUi(label) {
   resetBench();
   $("bench-card").hidden = false;
   $("bench-body").innerHTML = "";
   $("bench-progress").hidden = false;
   $("bench-bar").style.width = "3%";
-  $("bench-label").textContent = "Preparando o teste…";
+  $("bench-label").textContent = label;
   $("analyze").disabled = true;
   $("bench-card").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function analyze() {
+  if (!state.hw) return;
+  if (state.mode === "join") return analyzeJoin();
+  if (!state.video) return;
+  startAnalysisUi("Preparando o teste…");
   try {
     state.bench = await api.runBenchmark({ video: state.video, codec: state.codec, goal: state.goal });
     state.selectedId = state.bench.options.find((o) => o.recommended)?.id ?? state.bench.options[0].id;
@@ -219,6 +369,51 @@ function renderBench() {
     <p class="muted small">Teste feito com ${dec(b.sampleSeconds, 0)} s do meio do seu vídeo. Você pode escolher outra opção clicando nela.</p>`;
 }
 
+async function analyzeJoin() {
+  if (state.clips.length < 2) return;
+  startAnalysisUi("Comparando os formatos dos vídeos…");
+  try {
+    state.plan = await api.planJoin({ clips: state.clips, codec: state.codec, goal: state.goal });
+    renderPlan();
+    $("conv-card").hidden = false;
+    $("convert-hint").textContent = `${state.plan.title} · ~${fmtDur(state.plan.estSeconds)} · ~${fmtBytes(state.plan.estBytes)}`;
+  } catch (e) {
+    $("bench-body").innerHTML = `<ul class="warnings"><li>${esc(e)}</li></ul>`;
+  } finally {
+    $("bench-progress").hidden = true;
+    $("analyze").disabled = false;
+  }
+}
+
+function renderPlan() {
+  const p = state.plan;
+  const o = p.option;
+  const tag = p.mode === "copy"
+    ? `<span class="tag gpu">Cópia direta</span>`
+    : `<span class="tag ${o.kind}">${o.kind === "gpu" ? "GPU" : "CPU"}</span>`;
+  const quality = p.mode === "copy"
+    ? `<div class="value">Idêntica</div><div class="sub">sem recodificar</div>`
+    : `<div class="value">${qualityLabel(o.ssim)}</div><div class="sub">SSIM ${dec(o.ssim, 4)}</div>`;
+  const original = state.clips.reduce((s, c) => s + c.sizeBytes, 0);
+  $("bench-body").innerHTML = `
+    <div class="summary">${esc(p.summary)}</div>
+    <div class="opt recommended selected">
+      <div class="opt-head">
+        <span class="opt-title">${esc(p.title)}</span>
+        ${tag}
+        <span class="tag rec">Recomendado</span>
+        <div class="opt-detail plain">${o ? esc(o.detail) : "Os arquivos são emendados um depois do outro."}</div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="label">Tempo estimado</div><div class="value">${fmtDur(p.estSeconds)}</div><div class="sub">${o ? `${dec(o.fps, 0)} quadros/s` : "só cópia"}</div></div>
+        <div class="metric"><div class="label">Vídeo final</div><div class="value">${p.target.width}×${p.target.height}</div><div class="sub">${dec(p.target.fps, p.target.fps % 1 ? 2 : 0)} fps · ${fmtDur(p.totalDuration)}</div></div>
+        <div class="metric"><div class="label">Qualidade</div>${quality}</div>
+        <div class="metric"><div class="label">Tamanho estimado</div><div class="value">${fmtBytes(p.estBytes)}</div><div class="sub">${original ? `${dec((p.estBytes / original) * 100, 0)}% dos originais` : ""}</div></div>
+      </div>
+      <ul class="reasons">${p.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+    </div>`;
+}
+
 function selectOption(id) {
   if (state.converting) return;
   state.selectedId = id;
@@ -247,9 +442,10 @@ async function chooseOutput() {
 }
 
 async function convert() {
+  const join = state.mode === "join";
   const option = selectedOption();
   const outPath = $("out-path").value.trim();
-  if (!option || !outPath) return;
+  if (!outPath || (join ? !state.plan : !option)) return;
   setConverting(true);
   $("conv-result").innerHTML = "";
   $("conv-bar").style.width = "0%";
@@ -258,7 +454,8 @@ async function convert() {
   $("conv-fps").textContent = "";
   $("conv-eta").textContent = "";
   try {
-    await api.startConversion({ video: state.video, option, goal: state.goal, outPath });
+    if (join) await api.startJoin({ clips: state.clips, plan: state.plan, goal: state.goal, outPath });
+    else await api.startConversion({ video: state.video, option, goal: state.goal, outPath });
   } catch (e) {
     setConverting(false);
     showError(e);
@@ -272,6 +469,8 @@ function setConverting(on) {
   $("analyze").disabled = on;
   $("choose-out").disabled = on;
   $("out-path").disabled = on;
+  document.querySelectorAll(".mode").forEach((b) => (b.disabled = on));
+  if (state.mode === "join") renderClips();
 }
 
 function showError(msg) {
@@ -288,24 +487,27 @@ function onProgress(p) {
 
 function onDone(d) {
   setConverting(false);
-  const v = state.video;
+  const join = state.mode === "join";
+  const original = join ? state.clips.reduce((s, c) => s + c.sizeBytes, 0) : state.video.sizeBytes;
   const diff = d.seconds / d.estSeconds - 1;
-  const precision = Math.abs(diff) < 0.15 ? "a estimativa acertou" : diff > 0 ? `${dec(diff * 100, 0)}% mais lento que o estimado` : `${dec(-diff * 100, 0)}% mais rápido que o estimado`;
+  // Trabalhos de poucos segundos variam muito em porcentagem; até 2 s de diferença conta como acerto.
+  const close = Math.abs(diff) < 0.15 || Math.abs(d.seconds - d.estSeconds) < 2;
+  const precision = close ? "a estimativa acertou" : diff > 0 ? `${dec(diff * 100, 0)}% mais lento que o estimado` : `${dec(-diff * 100, 0)}% mais rápido que o estimado`;
   $("conv-result").innerHTML = `
     <div class="result">
-      <h3>✓ Vídeo convertido</h3>
+      <h3>✓ ${join ? `${state.clips.length} vídeos juntados` : "Vídeo convertido"}</h3>
       <div class="result-facts">
         <div><span>Tempo</span><strong>${fmtDur(d.seconds)}</strong></div>
         <div><span>Estimado</span><strong>${fmtDur(d.estSeconds)}</strong></div>
         <div><span>Tamanho final</span><strong>${fmtBytes(d.bytes)}</strong></div>
-        <div><span>Comparado ao original</span><strong>${v.sizeBytes ? dec((d.bytes / v.sizeBytes) * 100, 0) + "%" : "—"}</strong></div>
+        <div><span>${join ? "Comparado aos originais" : "Comparado ao original"}</span><strong>${original ? dec((d.bytes / original) * 100, 0) + "%" : "—"}</strong></div>
       </div>
       <div class="muted">${esc(d.outPath)} · ${precision}</div>
       <div><button class="ghost" id="reveal">Mostrar na pasta</button></div>
     </div>`;
   $("reveal").onclick = () => api.revealInFolder(d.outPath);
   // Próxima conversão não sobrescreve esta.
-  api.defaultOutputPath(v.path).then((p) => ($("out-path").value = p));
+  updateDefaultOutput();
 }
 
 function onError(msg) {
@@ -324,8 +526,19 @@ function wire() {
   });
   $("analyze").addEventListener("click", analyze);
   $("bench-body").addEventListener("click", (e) => {
-    const card = e.target.closest(".opt");
-    if (card) selectOption(card.dataset.id);
+    const card = e.target.closest(".opt[data-id]");
+    if (card && state.mode === "convert") selectOption(card.dataset.id);
+  });
+  document.querySelectorAll(".mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  // A versão Tauri (Rust) ainda não tem a junção: só mostra as abas se o backend oferecer.
+  $("modes").hidden = !api.planJoin;
+  $("join-body").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn || state.converting || state.loadingClips) return;
+    const i = Number(btn.dataset.i);
+    if (btn.dataset.action === "up") moveClip(i, -1);
+    else if (btn.dataset.action === "down") moveClip(i, 1);
+    else removeClip(i);
   });
   $("choose-out").addEventListener("click", chooseOutput);
   $("convert").addEventListener("click", convert);
@@ -341,16 +554,17 @@ function wire() {
 
   // Arrastar e soltar em qualquer lugar da janela.
   const drop = $("drop");
-  const dropPath = (path) => {
-    const ext = path.split(".").pop().toLowerCase();
-    if (VIDEO_EXT.includes(ext)) loadVideo(path);
+  const dropPaths = (paths) => {
+    if (state.converting || state.loadingClips || !paths.length) return;
+    if (state.mode === "join") return addClips(paths);
+    if (isVideo(paths[0])) loadVideo(paths[0]);
     else toast("Esse arquivo não parece ser um vídeo.");
   };
   if (api.onFileDrop) {
-    // Tauri: a própria janela entrega o caminho do arquivo.
-    api.onFileDrop((type, path) => {
+    // Tauri: a própria janela entrega os caminhos dos arquivos.
+    api.onFileDrop((type, paths) => {
       drop.classList.toggle("over", type === "over");
-      if (type === "drop") dropPath(path);
+      if (type === "drop") dropPaths([].concat(paths));
     });
     return;
   }
@@ -365,8 +579,7 @@ function wire() {
   document.addEventListener("drop", (e) => {
     e.preventDefault();
     drop.classList.remove("over");
-    const file = e.dataTransfer.files[0];
-    if (file) dropPath(api.pathForFile(file));
+    dropPaths([...e.dataTransfer.files].map((f) => api.pathForFile(f)));
   });
 }
 

@@ -107,6 +107,41 @@ main { max-width: 980px; margin: 0 auto; padding: 14px 28px 40px; display: grid;
 .chip.on.cpu::before { background: var(--cpu); }
 .chip.off { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--off); }
 
+/* Modos (Converter / Juntar) */
+.modes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+}
+.mode {
+  font: inherit; font-weight: 600; color: var(--muted); background: transparent; border: 0; border-radius: 9px;
+  padding: 10px 14px; cursor: pointer; transition: background .15s, color .15s;
+}
+.mode:hover:not(:disabled) { color: var(--text); }
+.mode.selected { background: var(--accent); color: var(--accent-text); }
+.mode:disabled { cursor: default; opacity: .7; }
+
+/* Lista de vídeos para juntar */
+.clip-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.clip {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+}
+.clip-n {
+  width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12.5px;
+}
+.clip-info { flex: 1; min-width: 0; }
+.clip-info .muted { font-size: 12.5px; }
+.clip-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-actions { display: flex; gap: 4px; flex: none; }
+button.icon {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); font-size: 14px; line-height: 1; padding: 0;
+}
+button.icon:hover:not(:disabled) { border-color: var(--accent); }
+button.icon.danger { color: var(--danger); }
+button.icon:disabled { opacity: .35; cursor: default; }
+
 /* Drop zone */
 .drop {
   border: 2px dashed var(--line); border-radius: 12px; padding: 26px; text-align: center; cursor: pointer;
@@ -182,6 +217,7 @@ button.ghost.danger { color: var(--danger); margin-left: auto; }
 .opt-head input { accent-color: var(--accent); margin: 0; }
 .opt-title { font-weight: 650; font-size: 15px; }
 .opt-detail { color: var(--muted); font-size: 12.5px; width: 100%; padding-left: 23px; margin-top: -6px; }
+.opt-detail.plain { padding-left: 0; }
 .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
 .tag.gpu { background: var(--gpu-soft); color: var(--gpu); }
 .tag.cpu { background: var(--cpu-soft); color: var(--cpu); }

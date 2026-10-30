@@ -12,6 +12,7 @@ const readline = require("node:readline");
 const { spawn } = require("node:child_process");
 const ffmpeg = require("./ffmpeg");
 const encoders = require("./encoders");
+const join = require("./join");
 
 const CANCELLED = "Conversão cancelada.";
 const BASE_ARGS = ["-y", "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1"];
@@ -26,25 +27,36 @@ class Converter {
   }
 
   start(video, option, goal, outPath) {
+    this.launch([video.path], outPath, option, (started) =>
+      option.kind === "hybrid"
+        ? this.hybrid(video, option, goal, outPath, started)
+        : this.single(video, option, goal, outPath, started)
+    );
+  }
+
+  /** Junta vários vídeos seguindo o plano de join.plan(). */
+  startJoin(clips, plan, goal, outPath) {
+    this.launch(clips.map((c) => c.path), outPath, plan, (started) => this.join(clips, plan, goal, outPath, started));
+  }
+
+  /** Roda um trabalho com controle de "ocupado", cancelamento e eventos de fim/erro. */
+  launch(inputs, outPath, estimate, job) {
     if (this.busy) throw new Error("Já existe uma conversão em andamento.");
-    if (path.resolve(outPath) === path.resolve(video.path)) {
-      throw new Error("O arquivo de saída não pode ser o mesmo do original.");
+    if (inputs.some((p) => path.resolve(outPath) === path.resolve(p))) {
+      throw new Error("O arquivo de saída não pode ser o mesmo de um dos originais.");
     }
     this.busy = true;
     this.cancelled = false;
     const started = performance.now();
-    const job = option.kind === "hybrid"
-      ? this.hybrid(video, option, goal, outPath, started)
-      : this.single(video, option, goal, outPath, started);
 
-    job
+    job(started)
       .then(() => {
         this.emit("conversion-done", {
           outPath,
           bytes: fs.statSync(outPath).size,
           seconds: (performance.now() - started) / 1000,
-          estSeconds: option.estSeconds,
-          estBytes: option.estBytes,
+          estSeconds: estimate.estSeconds,
+          estBytes: estimate.estBytes,
         });
       })
       .catch((e) => {
@@ -125,6 +137,20 @@ class Converter {
     );
   }
 
+  async join(clips, plan, goal, out, started) {
+    const t = this.tracker(started, plan.totalDuration, 1);
+    t.send(0, 0, plan.mode === "copy" ? "Emendando os arquivos" : "Iniciando");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "smartrender-juncao-"));
+    try {
+      const args = plan.mode === "copy"
+        ? join.copyArgs(clips, path.join(tmp, "lista.txt"), out)
+        : join.encodeArgs(clips, plan, goal, out);
+      await this.runJob([...BASE_ARGS, ...args], (secs, fps) => t.update(0, secs, fps));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
   async hybrid(video, option, goal, out, started) {
     const g = encoders.find(option.gpuEncoder);
     const c = encoders.find(option.cpuEncoder);
@@ -183,11 +209,11 @@ class Converter {
 }
 
 /** Sugere "<nome>_smartrender.mp4" na mesma pasta, sem sobrescrever nada que já exista. */
-function defaultOutputPath(file) {
+function defaultOutputPath(file, suffix = "smartrender") {
   const dir = path.dirname(file);
   const stem = path.parse(file).name || "video";
   for (let n = 1; ; n++) {
-    const candidate = path.join(dir, `${stem}_smartrender${n === 1 ? "" : `_${n}`}.mp4`);
+    const candidate = path.join(dir, `${stem}_${suffix}${n === 1 ? "" : `_${n}`}.mp4`);
     if (!fs.existsSync(candidate)) return candidate;
   }
 }

@@ -61,6 +61,8 @@ async function analyze(file) {
     bitDepth,
     chroma,
     audioCodec: audio?.codec_name || null,
+    audioSampleRate: audio ? num(audio.sample_rate) : 0,
+    audioChannels: audio?.channels || 0,
     hwDecode,
     warnings,
   };

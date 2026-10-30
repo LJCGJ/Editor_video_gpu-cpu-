@@ -18,6 +18,11 @@
   </header>
 
   <main>
+    <nav class="modes" id="modes" role="tablist" aria-label="O que você quer fazer">
+      <button class="mode selected" data-mode="convert" role="tab" aria-selected="true">🎬 Converter um vídeo</button>
+      <button class="mode" data-mode="join" role="tab" aria-selected="false">🔗 Juntar vídeos</button>
+    </nav>
+
     <!-- 1. Hardware -->
     <section class="card" id="hw-card">
       <div class="card-head">
@@ -34,14 +39,15 @@
     <section class="card" id="video-card">
       <div class="card-head">
         <span class="step">2</span>
-        <h2>Vídeo</h2>
+        <h2 id="video-title">Vídeo</h2>
       </div>
       <div id="drop" class="drop" tabindex="0" role="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-        <div><strong>Arraste um vídeo aqui</strong> ou clique para escolher</div>
+        <div><strong id="drop-title">Arraste um vídeo aqui</strong> ou clique para escolher</div>
         <div class="muted">MP4, MOV, MKV, AVI, WEBM, MTS…</div>
       </div>
       <div id="video-body" hidden></div>
+      <div id="join-body" hidden></div>
     </section>
 
     <!-- 3. Objetivo -->
@@ -72,14 +78,14 @@
         </label>
         <button id="analyze" class="primary">Analisar o meu vídeo</button>
       </div>
-      <p class="muted small">A análise codifica um trecho de 5 segundos do seu vídeo com cada opção disponível e mede tempo, qualidade e tamanho de verdade.</p>
+      <p class="muted small" id="analyze-hint">A análise codifica um trecho de 5 segundos do seu vídeo com cada opção disponível e mede tempo, qualidade e tamanho de verdade.</p>
     </section>
 
     <!-- 4. Resultado -->
     <section class="card" id="bench-card" hidden>
       <div class="card-head">
         <span class="step">4</span>
-        <h2>Resultado da análise</h2>
+        <h2 id="bench-title">Resultado da análise</h2>
       </div>
       <div id="bench-progress" class="progress-block" hidden>
         <div class="progress"><div class="bar" id="bench-bar"></div></div>
@@ -92,7 +98,7 @@
     <section class="card" id="conv-card" hidden>
       <div class="card-head">
         <span class="step">5</span>
-        <h2>Converter</h2>
+        <h2 id="conv-title">Converter</h2>
       </div>
       <div class="row out-row">
         <label class="field grow">

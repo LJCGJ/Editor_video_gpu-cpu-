@@ -23,11 +23,11 @@
       invoke("plugin:dialog|save", { options: { defaultPath, filters: [{ name: "Vídeo MP4", extensions: ["mp4"] }] } }),
     // Eventos enviados pelo Rust com `app.emit("nome", dados)`.
     on: (event, cb) => listen(event, (e) => cb(e.payload)),
-    // No Tauri, a janela entrega o caminho dos arquivos arrastados direto (os eventos HTML de drop não disparam).
+    // No Tauri, a janela entrega os caminhos dos arquivos arrastados direto (os eventos HTML de drop não disparam).
     onFileDrop: (cb) =>
       window.__TAURI__.webview.getCurrentWebview().onDragDropEvent(({ payload }) => {
         if (payload.type === "enter" || payload.type === "over") cb("over");
-        else if (payload.type === "drop" && payload.paths?.length) cb("drop", payload.paths[0]);
+        else if (payload.type === "drop" && payload.paths?.length) cb("drop", payload.paths);
         else cb("leave");
       }),
   };
