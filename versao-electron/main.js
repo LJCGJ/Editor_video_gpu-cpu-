@@ -5,6 +5,8 @@ const probe = require("./src/probe");
 const benchmark = require("./src/benchmark");
 const join = require("./src/join");
 const { Converter, defaultOutputPath } = require("./src/convert");
+const settings = require("./src/settings");
+const paths = require("./src/paths");
 
 let win;
 let hw = null;
@@ -52,6 +54,16 @@ handle("choose-output", async (defaultPath) => {
   const r = await dialog.showSaveDialog(win, { defaultPath, filters: [{ name: "Vídeo MP4", extensions: ["mp4"] }] });
   return r.canceled ? null : r.filePath;
 });
+handle("get-settings", () => settings.describe());
+handle("set-settings", (next) => {
+  settings.save(next);
+  paths.cleanupLeftovers();
+  return settings.describe();
+});
+handle("choose-folder", async (defaultPath) => {
+  const r = await dialog.showOpenDialog(win, { defaultPath, properties: ["openDirectory", "createDirectory"] });
+  return r.canceled ? null : r.filePaths[0];
+});
 
 function createWindow() {
   win = new BrowserWindow({
@@ -76,7 +88,12 @@ function createWindow() {
   win.webContents.on("will-navigate", (e) => e.preventDefault());
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  settings.load(app.getPath("userData"));
+  // Apaga pastas temporárias que ficaram presas em execuções anteriores.
+  paths.cleanupLeftovers();
+  createWindow();
+});
 app.on("window-all-closed", () => {
   converter.cancel();
   app.quit();

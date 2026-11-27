@@ -6,13 +6,13 @@
 // juntado em um MP4 sem recodificar.
 
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
 const { spawn } = require("node:child_process");
 const ffmpeg = require("./ffmpeg");
 const encoders = require("./encoders");
 const join = require("./join");
+const paths = require("./paths");
 
 const CANCELLED = "Conversão cancelada.";
 const BASE_ARGS = ["-y", "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1"];
@@ -27,7 +27,9 @@ class Converter {
   }
 
   start(video, option, goal, outPath) {
-    this.launch([video.path], outPath, option, (started) =>
+    // No modo híbrido, as duas partes ficam na pasta de trabalho até serem juntadas.
+    const tempBytes = option.kind === "hybrid" ? option.estBytes : 0;
+    this.launch([video.path], outPath, option, tempBytes, (started) =>
       option.kind === "hybrid"
         ? this.hybrid(video, option, goal, outPath, started)
         : this.single(video, option, goal, outPath, started)
@@ -36,15 +38,16 @@ class Converter {
 
   /** Junta vários vídeos seguindo o plano de join.plan(). */
   startJoin(clips, plan, goal, outPath) {
-    this.launch(clips.map((c) => c.path), outPath, plan, (started) => this.join(clips, plan, goal, outPath, started));
+    this.launch(clips.map((c) => c.path), outPath, plan, 0, (started) => this.join(clips, plan, goal, outPath, started));
   }
 
   /** Roda um trabalho com controle de "ocupado", cancelamento e eventos de fim/erro. */
-  launch(inputs, outPath, estimate, job) {
+  launch(inputs, outPath, estimate, tempBytes, job) {
     if (this.busy) throw new Error("Já existe uma conversão em andamento.");
     if (inputs.some((p) => path.resolve(outPath) === path.resolve(p))) {
       throw new Error("O arquivo de saída não pode ser o mesmo de um dos originais.");
     }
+    this.checkSpace(outPath, estimate.estBytes, tempBytes);
     this.busy = true;
     this.cancelled = false;
     const started = performance.now();
@@ -60,7 +63,12 @@ class Converter {
         });
       })
       .catch((e) => {
-        fs.rmSync(outPath, { force: true });
+        // Apaga o arquivo incompleto; se ele ainda estiver preso, não esconde o erro original.
+        try {
+          fs.rmSync(outPath, { force: true, maxRetries: 5, retryDelay: 300 });
+        } catch {
+          // Arquivo incompleto fica para trás; o usuário vê o erro real abaixo.
+        }
         this.emit("conversion-error", e.message);
       })
       .finally(() => {
@@ -69,9 +77,46 @@ class Converter {
       });
   }
 
+  /**
+   * Confere o espaço livre antes de começar: o vídeo final (com 10% de folga) no disco de saída
+   * e, no modo híbrido, as partes temporárias no disco de trabalho.
+   */
+  checkSpace(outPath, estBytes, tempBytes) {
+    const outDir = path.dirname(path.resolve(outPath));
+    fs.mkdirSync(outDir, { recursive: true });
+    const margin = 100 * 1048576;
+    const work = paths.workDir();
+    const sameDrive = paths.driveOf(outDir) === paths.driveOf(work);
+    paths.ensureSpace(outDir, estBytes * 1.1 + margin + (sameDrive ? tempBytes : 0), "salvar o vídeo");
+    if (tempBytes && !sameDrive) paths.ensureSpace(work, tempBytes + margin, "os arquivos temporários");
+  }
+
   cancel() {
     this.cancelled = true;
+    this.killRunning();
+  }
+
+  killRunning() {
     for (const child of this.running) child.kill();
+  }
+
+  /**
+   * Roda vários FFmpeg ao mesmo tempo. Se um falhar, para os outros e espera todos saírem
+   * antes de devolver o erro: assim ninguém fica gravando numa pasta que está sendo apagada.
+   */
+  async runParallel(jobs) {
+    let firstError = null;
+    await Promise.allSettled(
+      jobs.map((p) =>
+        p.catch((e) => {
+          if (!firstError) {
+            firstError = e;
+            this.killRunning();
+          }
+        })
+      )
+    );
+    if (firstError) throw firstError;
   }
 
   /** Soma o progresso de vários processos FFmpeg rodando em paralelo. */
@@ -140,14 +185,14 @@ class Converter {
   async join(clips, plan, goal, out, started) {
     const t = this.tracker(started, plan.totalDuration, 1);
     t.send(0, 0, plan.mode === "copy" ? "Emendando os arquivos" : "Iniciando");
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "smartrender-juncao-"));
+    const tmp = paths.makeTemp("juncao");
     try {
       const args = plan.mode === "copy"
         ? join.copyArgs(clips, path.join(tmp, "lista.txt"), out)
         : join.encodeArgs(clips, plan, goal, out);
       await this.runJob([...BASE_ARGS, ...args], (secs, fps) => t.update(0, secs, fps));
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      paths.removeTemp(tmp);
     }
   }
 
@@ -155,11 +200,11 @@ class Converter {
     const g = encoders.find(option.gpuEncoder);
     const c = encoders.find(option.cpuEncoder);
     if (!g || !c) throw new Error("Opção híbrida inválida.");
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "smartrender-conv-"));
+    const tmp = paths.makeTemp("conv");
     try {
       await this.hybridIn(video, option, goal, out, started, tmp, g, c);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      paths.removeTemp(tmp);
     }
   }
 
@@ -174,7 +219,7 @@ class Converter {
 
     const t = this.tracker(started, video.duration, 2);
     t.send(0, 0, "Iniciando GPU e CPU");
-    await Promise.all([
+    await this.runParallel([
       this.runJob(
         [...BASE_ARGS, ...encoders.decodeArgs(video.hwDecode), "-i", video.path, "-t", at,
           "-map", "0:v:0", "-an", ...encoders.videoArgs(g, goal, false), "-f", "mpegts", partGpu],
@@ -208,9 +253,12 @@ class Converter {
   }
 }
 
-/** Sugere "<nome>_smartrender.mp4" na mesma pasta, sem sobrescrever nada que já exista. */
+/**
+ * Sugere "<nome>_smartrender.mp4" na pasta de saída escolhida (ou ao lado do original),
+ * sem sobrescrever nada que já exista.
+ */
 function defaultOutputPath(file, suffix = "smartrender") {
-  const dir = path.dirname(file);
+  const dir = paths.outputDir() || path.dirname(file);
   const stem = path.parse(file).name || "video";
   for (let n = 1; ; n++) {
     const candidate = path.join(dir, `${stem}_${suffix}${n === 1 ? "" : `_${n}`}.mp4`);

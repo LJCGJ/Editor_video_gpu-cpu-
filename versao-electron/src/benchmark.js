@@ -3,13 +3,13 @@
 // A recomendação nasce de medição real nesta máquina, não de uma tabela fixa.
 
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
 const { spawn } = require("node:child_process");
 const ffmpeg = require("./ffmpeg");
 const encoders = require("./encoders");
 const recommend = require("./recommend");
+const paths = require("./paths");
 
 const SAMPLE_SECONDS = 5;
 const AUDIO_KBPS = 192;
@@ -21,11 +21,13 @@ async function run(hw, video, codec, goal, onProgress = () => {}) {
     .filter(Boolean);
   if (!candidates.length) throw new Error("Nenhum codificador disponível para este formato nesta máquina.");
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "smartrender-teste-"));
+  // O teste grava alguns trechos curtos (dezenas de MB) na pasta de trabalho.
+  paths.ensureSpace(paths.workDir(), 300 * 1048576, "o teste de 5 segundos");
+  const tmp = paths.makeTemp("teste");
   try {
     return await runIn(tmp, candidates, video, codec, goal, onProgress);
   } finally {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    paths.removeTemp(tmp);
   }
 }
 
@@ -68,10 +70,15 @@ async function runIn(tmp, candidates, video, codec, goal, onProgress) {
     if (gpu && cpu) {
       onProgress({ step: total, total, label: "Testando GPU + CPU trabalhando ao mesmo tempo" });
       try {
-        const [rg, rc] = await Promise.all([
+        // allSettled: espera os DOIS FFmpegs terminarem, mesmo se um falhar. Com Promise.all, o
+        // que sobrasse continuaria gravando enquanto a pasta temporária era apagada (erro EBUSY).
+        const settled = await Promise.allSettled([
           encodeSample(video, sample, gpu.enc, goal, path.join(tmp, "hibrido_gpu.mp4")),
           encodeSample(video, sample, cpu.enc, goal, path.join(tmp, "hibrido_cpu.mp4")),
         ]);
+        const failed = settled.find((r) => r.status === "rejected");
+        if (failed) throw failed.reason;
+        const [rg, rc] = settled.map((r) => r.value);
         // Só vale a janela em que os dois estavam codificando ao mesmo tempo: quando um termina,
         // o outro fica sozinho e acelera, o que inflaria o resultado.
         const from = Math.max(firstFrameTime(rg), firstFrameTime(rc));

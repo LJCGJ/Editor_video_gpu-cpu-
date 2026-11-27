@@ -20,7 +20,7 @@ Requisito extra: [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 npm run installer
 ```
 
-O instalador sai em `dist/SmartRender-Setup-0.2.0.exe`. Ele instala só para o usuário atual (sem pedir senha de
+O instalador sai em `dist/SmartRender-Setup-0.3.0.exe`. Ele instala só para o usuário atual (sem pedir senha de
 administrador), cria atalhos e desinstalador, e avisa no final se o FFmpeg não estiver instalado.
 O FFmpeg não vai embutido: ocuparia mais de 400 MB e exigiria cumprir a licença GPL ao distribuir.
 
@@ -48,6 +48,19 @@ Na aba **🔗 Juntar vídeos**, escolha ou arraste vários vídeos, ordene com �
 - **Formatos diferentes**: todos são ajustados para a resolução e a taxa de quadros do primeiro vídeo
   (com tarjas pretas quando a proporção muda, por exemplo um vídeo vertical no meio de horizontais).
   Os vídeos sem áudio ganham silêncio. O mesmo teste de 5 s escolhe entre GPU e CPU, medindo no vídeo mais longo.
+
+## Onde processar e salvar (`src/paths.js`, `src/settings.js`)
+
+A seção **📁 Onde processar e salvar** define duas pastas, guardadas em `%APPDATA%\smartrender\settings.json`:
+
+- **Arquivos temporários**: onde ficam os trechos do teste de 5 s e as partes do modo híbrido.
+  Padrão: a pasta temporária do Windows.
+- **Vídeos prontos**: pasta fixa para salvar, ou (padrão) ao lado do vídeo original.
+
+O app mostra o espaço livre de cada disco e, se o disco da pasta de trabalho estiver apertado e houver outro
+com bem mais folga, oferece **"Usar D:\SmartRender para tudo"**. Antes de converter ou juntar, confere se há
+espaço suficiente. Pastas temporárias que tenham ficado presas (arquivo travado pelo antivírus, por exemplo)
+são apagadas na próxima abertura do app.
 
 ## Limitações conhecidas
 

@@ -142,6 +142,22 @@ button.icon:hover:not(:disabled) { border-color: var(--accent); }
 button.icon.danger { color: var(--danger); }
 button.icon:disabled { opacity: .35; cursor: default; }
 
+/* Pastas */
+.folder-alert {
+  display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: var(--warn-soft); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+}
+.folder-row {
+  display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+}
+.folder-row + .folder-row { margin-top: 8px; }
+.folder-info { min-width: 0; flex: 1; }
+.folder-info .label { font-size: 12px; color: var(--muted); }
+.folder-path { font-weight: 600; word-break: break-all; }
+.small-line { font-size: 12.5px; }
+.folder-actions { display: flex; gap: 6px; flex: none; }
+
 /* Drop zone */
 .drop {
   border: 2px dashed var(--line); border-radius: 12px; padding: 26px; text-align: center; cursor: pointer;

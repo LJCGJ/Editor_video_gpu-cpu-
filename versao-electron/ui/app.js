@@ -117,6 +117,107 @@ function renderHardware() {
   }
 }
 
+// ---------- pastas ----------
+const GB = 1073741824;
+const gb = (b) => `${dec(b / GB, 1)} GB`;
+const driveName = (p) => p.slice(0, 2).toUpperCase();
+
+async function loadSettings() {
+  if (!api.getSettings) {
+    // A versão Tauri (Rust) ainda não tem as preferências de pastas.
+    $("folders-card").hidden = true;
+    return;
+  }
+  try {
+    state.settings = await api.getSettings();
+    renderFolders();
+  } catch (e) {
+    $("folders-body").innerHTML = `<ul class="warnings"><li>${esc(e)}</li></ul>`;
+  }
+}
+
+/** Sugere outro disco quando o da pasta de trabalho está apertado e existe um com bem mais folga. */
+function driveSuggestion(s) {
+  const work = s.drives.find((d) => driveName(d.root) === driveName(s.workDir));
+  const best = [...s.drives].sort((a, b) => b.free - a.free)[0];
+  if (!work || !best || best.root === work.root) return null;
+  const tight = work.free < 15 * GB || work.free / work.total < 0.1;
+  return tight && best.free > work.free * 2 ? { from: work, to: best } : null;
+}
+
+function renderFolders() {
+  const s = state.settings;
+  if (!s) return;
+  const lock = state.converting ? "disabled" : "";
+  const sug = driveSuggestion(s);
+  const base = sug ? `${sug.to.root}SmartRender` : "";
+  const alert = sug
+    ? `<div class="folder-alert">
+         <div>⚠️ O disco <strong>${driveName(sug.from.root)}</strong> está com pouco espaço (${gb(sug.from.free)} livres).
+         O disco <strong>${driveName(sug.to.root)}</strong> tem ${gb(sug.to.free)} livres.</div>
+         <button class="primary" id="use-drive" data-base="${esc(base)}" ${lock}>Usar ${esc(base)} para tudo</button>
+       </div>`
+    : "";
+  const space = (sp, p) => (sp ? `Disco ${driveName(p)} · ${gb(sp.free)} livres` : "");
+  const work = s.workDirCustom ? s.workDir : `Pasta temporária do Windows (${s.workDir})`;
+  const out = s.outputDir || "Na mesma pasta do vídeo original";
+  $("folders-body").innerHTML = `
+    ${alert}
+    <div class="folder-row">
+      <div class="folder-info">
+        <div class="label">Arquivos temporários (teste de 5 s e modo híbrido)</div>
+        <div class="folder-path">${esc(work)}</div>
+        <div class="muted small-line">${space(s.workSpace, s.workDir)}</div>
+      </div>
+      <div class="folder-actions">
+        <button class="ghost" data-folder="workDir" ${lock}>Alterar…</button>
+        ${s.workDirCustom ? `<button class="ghost" data-reset="workDir" ${lock}>Usar o padrão</button>` : ""}
+      </div>
+    </div>
+    <div class="folder-row">
+      <div class="folder-info">
+        <div class="label">Vídeos prontos</div>
+        <div class="folder-path">${esc(out)}</div>
+        <div class="muted small-line">${s.outputDir ? space(s.outputSpace, s.outputDir) : "Você também pode mudar o nome e o local em cada conversão."}</div>
+      </div>
+      <div class="folder-actions">
+        <button class="ghost" data-folder="outputDir" ${lock}>Alterar…</button>
+        ${s.outputDir ? `<button class="ghost" data-reset="outputDir" ${lock}>Mesma pasta do original</button>` : ""}
+      </div>
+    </div>`;
+}
+
+async function saveSettings(next, message) {
+  if (state.converting) return;
+  try {
+    state.settings = await api.setSettings(next);
+    renderFolders();
+    updateDefaultOutput();
+    toast(message);
+  } catch (e) {
+    toast(String(e));
+  }
+}
+
+async function onFoldersClick(e) {
+  const btn = e.target.closest("button");
+  if (!btn || state.converting) return;
+  const s = state.settings;
+  if (btn.id === "use-drive") {
+    const base = btn.dataset.base;
+    return saveSettings({ workDir: `${base}\\temp`, outputDir: `${base}\\videos` }, `Pronto: processando e salvando em ${base}.`);
+  }
+  if (btn.dataset.reset) {
+    return saveSettings({ [btn.dataset.reset]: null }, "Pasta voltou para o padrão.");
+  }
+  if (btn.dataset.folder) {
+    const key = btn.dataset.folder;
+    const start = key === "workDir" ? s.workDir : s.outputDir || undefined;
+    const dir = await api.chooseFolder(start);
+    if (dir) saveSettings({ [key]: dir }, key === "workDir" ? "Pasta de trabalho atualizada." : "Pasta dos vídeos prontos atualizada.");
+  }
+}
+
 // ---------- modo ----------
 function setMode(mode) {
   if (state.converting || state.loadingClips || mode === state.mode) return;
@@ -471,6 +572,7 @@ function setConverting(on) {
   $("out-path").disabled = on;
   document.querySelectorAll(".mode").forEach((b) => (b.disabled = on));
   if (state.mode === "join") renderClips();
+  renderFolders();
 }
 
 function showError(msg) {
@@ -525,6 +627,7 @@ function wire() {
     resetBench();
   });
   $("analyze").addEventListener("click", analyze);
+  $("folders-body").addEventListener("click", onFoldersClick);
   $("bench-body").addEventListener("click", (e) => {
     const card = e.target.closest(".opt[data-id]");
     if (card && state.mode === "convert") selectOption(card.dataset.id);
@@ -585,3 +688,4 @@ function wire() {
 
 wire();
 detectHardware();
+loadSettings();

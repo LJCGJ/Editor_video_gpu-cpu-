@@ -6,10 +6,12 @@ só GPU, só CPU, ou as duas ao mesmo tempo, e explica o porquê.
 - 🎬 **Converter um vídeo**: testa cada opção num trecho de 5 s e recomenda a melhor para o seu objetivo.
 - 🔗 **Juntar vídeos**: emenda vários vídeos em um só. Se tiverem o mesmo formato, é instantâneo e sem perda;
   se não, padroniza resolução e taxa de quadros e escolhe GPU ou CPU para recodificar.
+- 📁 **Onde processar e salvar**: escolha em qual disco ficam os arquivos temporários e os vídeos prontos.
+  Se o C: estiver cheio, o app sugere outro disco com um clique e confere o espaço antes de começar.
 
 ## ⬇️ Download
 
-Baixe o instalador **`SmartRender-Setup-0.2.0.exe`** na página de
+Baixe o instalador **`SmartRender-Setup-0.3.0.exe`** na página de
 [**Releases**](https://github.com/LJCGJ/Editor_video_gpu-cpu-/releases/latest).
 
 - Instala só para o seu usuário, sem pedir senha de administrador.
