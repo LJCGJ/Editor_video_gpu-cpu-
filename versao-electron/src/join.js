@@ -108,7 +108,7 @@ function copyArgs(clips, listFile, out) {
     "-f", "concat", "-safe", "0", "-i", listFile,
     "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
     ...(clips[0].codec === "hevc" ? ["-tag:v", "hvc1"] : []),
-    "-movflags", "+faststart", out,
+    "-movflags", "+faststart", "-f", "mp4", out,
   ];
 }
 
@@ -139,7 +139,7 @@ function encodeArgs(clips, p, goal, out) {
     "-map", "[vout]",
     ...(anyAudio ? ["-map", "[aout]", "-c:a", "aac", "-b:a", `${AUDIO_KBPS}k`] : []),
     ...encoders.codecArgs(e, goal, true),
-    "-movflags", "+faststart", out,
+    "-movflags", "+faststart", "-f", "mp4", out,
   ];
 }
 

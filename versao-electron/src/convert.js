@@ -29,31 +29,39 @@ class Converter {
   start(video, option, goal, outPath) {
     // No modo híbrido, as duas partes ficam na pasta de trabalho até serem juntadas.
     const tempBytes = option.kind === "hybrid" ? option.estBytes : 0;
-    this.launch([video.path], outPath, option, tempBytes, (started) =>
+    this.launch([video.path], outPath, option, tempBytes, (started, out) =>
       option.kind === "hybrid"
-        ? this.hybrid(video, option, goal, outPath, started)
-        : this.single(video, option, goal, outPath, started)
+        ? this.hybrid(video, option, goal, out, started)
+        : this.single(video, option, goal, out, started)
     );
   }
 
   /** Junta vários vídeos seguindo o plano de join.plan(). */
   startJoin(clips, plan, goal, outPath) {
-    this.launch(clips.map((c) => c.path), outPath, plan, 0, (started) => this.join(clips, plan, goal, outPath, started));
+    this.launch(clips.map((c) => c.path), outPath, plan, 0, (started, out) => this.join(clips, plan, goal, out, started));
   }
 
-  /** Roda um trabalho com controle de "ocupado", cancelamento e eventos de fim/erro. */
+  /**
+   * Roda um trabalho com controle de "ocupado", cancelamento e eventos de fim/erro.
+   *
+   * O FFmpeg grava em "<nome>.mp4.parcial" e o arquivo só ganha o nome final quando termina
+   * com sucesso. Assim, se o processo for interrompido (app fechado, computador desligado),
+   * o que sobra tem cara de incompleto, e nunca de vídeo pronto que não abre.
+   */
   launch(inputs, outPath, estimate, tempBytes, job) {
     if (this.busy) throw new Error("Já existe uma conversão em andamento.");
     if (inputs.some((p) => path.resolve(outPath) === path.resolve(p))) {
       throw new Error("O arquivo de saída não pode ser o mesmo de um dos originais.");
     }
     this.checkSpace(outPath, estimate.estBytes, tempBytes);
+    const partial = partialPath(outPath);
     this.busy = true;
     this.cancelled = false;
     const started = performance.now();
 
-    job(started)
+    job(started, partial)
       .then(() => {
+        fs.renameSync(partial, outPath);
         this.emit("conversion-done", {
           outPath,
           bytes: fs.statSync(outPath).size,
@@ -65,9 +73,9 @@ class Converter {
       .catch((e) => {
         // Apaga o arquivo incompleto; se ele ainda estiver preso, não esconde o erro original.
         try {
-          fs.rmSync(outPath, { force: true, maxRetries: 5, retryDelay: 300 });
+          fs.rmSync(partial, { force: true, maxRetries: 5, retryDelay: 300 });
         } catch {
-          // Arquivo incompleto fica para trás; o usuário vê o erro real abaixo.
+          // Fica para trás com a extensão .parcial, que já deixa claro que não é um vídeo pronto.
         }
         this.emit("conversion-error", e.message);
       })
@@ -94,6 +102,12 @@ class Converter {
   cancel() {
     this.cancelled = true;
     this.killRunning();
+  }
+
+  /** Espera a conversão terminar de vez (inclusive apagar o arquivo parcial), por até `ms`. */
+  async whenIdle(ms = 8000) {
+    const end = Date.now() + ms;
+    while (this.busy && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
   }
 
   killRunning() {
@@ -176,7 +190,7 @@ class Converter {
         "-map", "0:v:0", "-map", "0:a:0?",
         ...encoders.videoArgs(e, goal, true),
         ...encoders.audioArgs(video.audioCodec),
-        "-movflags", "+faststart", out,
+        "-movflags", "+faststart", "-f", "mp4", out,
       ],
       (secs, fps) => t.update(0, secs, fps)
     );
@@ -247,11 +261,14 @@ class Converter {
       ...(video.audioCodec ? ["-map", "1:a:0"] : []),
       "-c", "copy",
       ...(g.codec === "hevc" ? ["-tag:v", "hvc1"] : []),
-      "-movflags", "+faststart", out,
+      "-movflags", "+faststart", "-f", "mp4", out,
     ]);
     t.send(1, 0, "Concluído");
   }
 }
+
+/** Nome usado enquanto o vídeo ainda está sendo gravado. */
+const partialPath = (outPath) => `${outPath}.parcial`;
 
 /**
  * Sugere "<nome>_smartrender.mp4" na pasta de saída escolhida (ou ao lado do original),

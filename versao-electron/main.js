@@ -65,6 +65,30 @@ handle("choose-folder", async (defaultPath) => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+/**
+ * Fechar a janela no meio de uma conversão perde o vídeo que está sendo gerado. Pergunta antes;
+ * se o usuário confirmar, cancela, espera o FFmpeg sair e o arquivo parcial ser apagado, e fecha.
+ */
+let closingAfterCancel = false;
+function confirmCloseDuringConversion(e) {
+  if (!converter.busy || closingAfterCancel) return;
+  e.preventDefault();
+  const choice = dialog.showMessageBoxSync(win, {
+    type: "warning",
+    title: "Conversão em andamento",
+    message: "Há um vídeo sendo gerado agora.",
+    detail: "Se fechar o SmartRender, a conversão é cancelada e o vídeo incompleto é descartado.",
+    buttons: ["Continuar convertendo", "Cancelar e fechar"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (choice !== 1) return;
+  closingAfterCancel = true;
+  converter.cancel();
+  converter.whenIdle().then(() => win?.close());
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1120,
@@ -83,6 +107,7 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, "ui", "index.html"));
+  win.on("close", confirmCloseDuringConversion);
   // Links externos abrem no navegador, nunca dentro do app.
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (e) => e.preventDefault());

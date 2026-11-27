@@ -20,7 +20,7 @@ Requisito extra: [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 npm run installer
 ```
 
-O instalador sai em `dist/SmartRender-Setup-0.3.0.exe`. Ele instala só para o usuário atual (sem pedir senha de
+O instalador sai em `dist/SmartRender-Setup-0.3.1.exe`. Ele instala só para o usuário atual (sem pedir senha de
 administrador), cria atalhos e desinstalador, e avisa no final se o FFmpeg não estiver instalado.
 O FFmpeg não vai embutido: ocuparia mais de 400 MB e exigiria cumprir a licença GPL ao distribuir.
 
@@ -61,6 +61,14 @@ O app mostra o espaço livre de cada disco e, se o disco da pasta de trabalho es
 com bem mais folga, oferece **"Usar D:\SmartRender para tudo"**. Antes de converter ou juntar, confere se há
 espaço suficiente. Pastas temporárias que tenham ficado presas (arquivo travado pelo antivírus, por exemplo)
 são apagadas na próxima abertura do app.
+
+## Vídeos nunca ficam "pela metade" com cara de prontos
+
+- Enquanto é gerado, o vídeo se chama `<nome>.mp4.parcial`. Só quando o FFmpeg termina com sucesso ele é
+  renomeado para `<nome>.mp4`. Se o processo for interrompido (app fechado à força, queda de energia),
+  o que sobra tem a extensão `.parcial` e pode ser apagado.
+- Ao cancelar ou dar erro, o arquivo parcial é apagado.
+- Fechar a janela durante uma conversão mostra um aviso: **Continuar convertendo** ou **Cancelar e fechar**.
 
 ## Limitações conhecidas
 

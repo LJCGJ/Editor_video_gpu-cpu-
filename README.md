@@ -11,7 +11,7 @@ só GPU, só CPU, ou as duas ao mesmo tempo, e explica o porquê.
 
 ## ⬇️ Download
 
-Baixe o instalador **`SmartRender-Setup-0.3.0.exe`** na página de
+Baixe o instalador **`SmartRender-Setup-0.3.1.exe`** na página de
 [**Releases**](https://github.com/LJCGJ/Editor_video_gpu-cpu-/releases/latest).
 
 - Instala só para o seu usuário, sem pedir senha de administrador.
