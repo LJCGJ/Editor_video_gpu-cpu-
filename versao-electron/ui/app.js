@@ -76,6 +76,12 @@ function toast(msg) {
 
 // ---------- 1. hardware ----------
 async function detectHardware() {
+  if (state.hw) {
+    // Re-detecção (outro FFmpeg): mostra o carregamento de novo.
+    state.hw = null;
+    $("hw-body").innerHTML = `<div class="loading"><span class="spinner"></span> Detectando os codificadores do novo FFmpeg…</div>`;
+    for (const opt of $("codec").options) opt.textContent = opt.textContent.replace(" (indisponível)", "");
+  }
   try {
     state.hw = await api.detectHardware();
     renderHardware();
@@ -184,7 +190,99 @@ function renderFolders() {
         <button class="ghost" data-folder="outputDir" ${lock}>Alterar…</button>
         ${s.outputDir ? `<button class="ghost" data-reset="outputDir" ${lock}>Mesma pasta do original</button>` : ""}
       </div>
+    </div>
+    ${ffmpegRow(s, lock)}
+    ${dataRow(s, lock, base)}
+    ${memoryAlert(s)}
+    ${usagePanel(s)}`;
+}
+
+function ffmpegRow(s, lock) {
+  const where = s.ffmpegPath || "Não encontrado";
+  const how = s.ffmpegCustom ? "Pasta escolhida por você." : s.ffmpegBundled ? "Cópia que acompanha o programa." : "O do sistema (PATH).";
+  return `
+    <div class="folder-row">
+      <div class="folder-info">
+        <div class="label">FFmpeg</div>
+        <div class="folder-path">${esc(where)}</div>
+        <div class="muted small-line">${how} Ele só é lido, não grava nada no disco.</div>
+      </div>
+      <div class="folder-actions">
+        <button class="ghost" data-folder="ffmpegDir" ${lock}>Alterar…</button>
+        ${s.ffmpegCustom ? `<button class="ghost" data-reset="ffmpegDir" ${lock}>Usar o do sistema</button>` : ""}
+      </div>
     </div>`;
+}
+
+function dataRow(s, lock, suggestedBase) {
+  const d = s.data;
+  if (!d) return "";
+  const target = suggestedBase ? `${suggestedBase}\\dados` : "";
+  const status = d.portable
+    ? `Modo portátil ligado: nada do app fica em %APPDATA%.${d.oldDataRemoved ? " O cache antigo no C: foi apagado." : ""}`
+    : "Padrão do Windows (%APPDATA%). Mover tira preferências, cache e logs do C:.";
+  const error = d.error ? `<div class="small-line warn-text">${esc(d.error)}</div>` : "";
+  return `
+    <div class="folder-row">
+      <div class="folder-info">
+        <div class="label">Dados do app (preferências, cache do navegador interno, logs)</div>
+        <div class="folder-path">${esc(d.dataDir)}</div>
+        <div class="muted small-line">${status}</div>
+        ${error}
+      </div>
+      <div class="folder-actions">
+        ${!d.portable && target ? `<button class="primary" data-move-data="${esc(target)}" ${lock}>Mover para ${esc(target)}</button>` : ""}
+        <button class="ghost" data-move-data="?" ${lock}>${d.portable ? "Mudar…" : "Mover…"}</button>
+        ${d.portable ? `<button class="ghost" data-move-data="" ${lock}>Voltar ao padrão</button>` : ""}
+      </div>
+    </div>`;
+}
+
+function memoryAlert(s) {
+  const m = s.memory;
+  if (!m || !m.low) return "";
+  const pf = m.pagefiles[0];
+  const where = pf ? `O arquivo de paginação fica em <strong>${esc(pf.path)}</strong>${pf.diskFree != null ? `, num disco com ${gb(pf.diskFree)} livres` : ""}.` : "";
+  return `
+    <div class="folder-alert memory">
+      <div>
+        <div>⚠️ <strong>Pouca memória virtual:</strong> ${gb(m.freeVirtual)} livres. ${where}
+        Com isso, codificadores de CPU podem falhar; o app já usa configurações mais econômicas.</div>
+        <details class="guide">
+          <summary>Como mover a memória virtual para outro disco (resolve de vez)</summary>
+          <ol>
+            <li>Clique em <strong>Abrir configurações</strong> ao lado (ou rode <code>SystemPropertiesPerformance</code>).</li>
+            <li>Na aba <strong>Avançado</strong>, em "Memória virtual", clique em <strong>Alterar…</strong>.</li>
+            <li>Desmarque <strong>"Gerenciar automaticamente o tamanho do arquivo de paginação"</strong>.</li>
+            <li>Selecione o disco com espaço (ex.: <strong>D:</strong>), marque <strong>"Tamanho gerenciado pelo sistema"</strong> e clique em <strong>Definir</strong>.</li>
+            <li>Selecione o <strong>C:</strong>, marque <strong>"Sem arquivo de paginação"</strong> (ou um tamanho pequeno) e clique em <strong>Definir</strong>.</li>
+            <li>Clique em <strong>OK</strong> e <strong>reinicie o computador</strong>. Precisa de permissão de administrador.</li>
+          </ol>
+        </details>
+      </div>
+      <button class="ghost" id="open-memory">Abrir configurações</button>
+    </div>`;
+}
+
+function usagePanel(s) {
+  if (!s.usage?.length) return "";
+  const onC = s.usage.filter((u) => u.onC);
+  const rows = s.usage
+    .map((u) => `
+      <tr class="${u.onC ? "on-c" : ""}">
+        <td>${u.onC ? "⚠️" : "✅"}</td>
+        <td><strong>${esc(u.label)}</strong><div class="muted">${esc(u.note)}</div></td>
+        <td class="mono">${esc(u.where)}</td>
+      </tr>`)
+    .join("");
+  const summary = onC.length
+    ? `${onC.length} de ${s.usage.length} itens ainda usam o C:`
+    : "Nada do SmartRender usa o C:";
+  return `
+    <details class="usage">
+      <summary>O que o SmartRender usa no disco C: <span class="pill ${onC.length ? "warn" : "ok"}">${summary}</span></summary>
+      <table>${rows}</table>
+    </details>`;
 }
 
 async function saveSettings(next, message) {
@@ -207,14 +305,40 @@ async function onFoldersClick(e) {
     const base = btn.dataset.base;
     return saveSettings({ workDir: `${base}\\temp`, outputDir: `${base}\\videos` }, `Pronto: processando e salvando em ${base}.`);
   }
+  if (btn.id === "open-memory") return api.openMemorySettings();
+  if (btn.dataset.moveData !== undefined) return moveData(btn.dataset.moveData);
   if (btn.dataset.reset) {
-    return saveSettings({ [btn.dataset.reset]: null }, "Pasta voltou para o padrão.");
+    await saveSettings({ [btn.dataset.reset]: null }, "Voltou para o padrão.");
+    if (btn.dataset.reset === "ffmpegDir") detectHardware();
+    return;
   }
   if (btn.dataset.folder) {
     const key = btn.dataset.folder;
-    const start = key === "workDir" ? s.workDir : s.outputDir || undefined;
+    const start = { workDir: s.workDir, outputDir: s.outputDir, ffmpegDir: s.ffmpegPath && s.ffmpegPath.replace(/[\\/][^\\/]+$/, "") }[key] || undefined;
     const dir = await api.chooseFolder(start);
-    if (dir) saveSettings({ [key]: dir }, key === "workDir" ? "Pasta de trabalho atualizada." : "Pasta dos vídeos prontos atualizada.");
+    if (!dir) return;
+    const messages = { workDir: "Pasta de trabalho atualizada.", outputDir: "Pasta dos vídeos prontos atualizada.", ffmpegDir: "FFmpeg atualizado." };
+    await saveSettings({ [key]: dir }, messages[key]);
+    // Outro FFmpeg pode ter outros codificadores: detecta de novo.
+    if (key === "ffmpegDir") detectHardware();
+  }
+}
+
+/** Move os dados do app (modo portátil). `target`: pasta, "?" para escolher, "" para voltar ao padrão. */
+async function moveData(target) {
+  if (state.converting) return;
+  let dir = target;
+  if (target === "?") {
+    dir = await api.chooseFolder(state.settings.data?.dataDir);
+    if (!dir) return;
+  }
+  const what = dir ? `para ${dir}` : "de volta para o padrão do Windows (%APPDATA%)";
+  if (!confirm(`Mover as preferências, o cache e os logs do SmartRender ${what}?\n\nO app vai reiniciar.`)) return;
+  try {
+    await api.moveData(dir || null);
+    toast("Reiniciando o SmartRender…");
+  } catch (e) {
+    toast(String(e));
   }
 }
 

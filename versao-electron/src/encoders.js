@@ -19,18 +19,26 @@ const ENCODERS = [
 
 const find = (name) => ENCODERS.find((e) => e.name === name);
 
+let lowMemory = false;
+/** Liga o modo econômico de memória dos codificadores de CPU (veja system.memory). */
+const setLowMemory = (on) => (lowMemory = !!on);
+const isLowMemory = () => lowMemory;
+
 /**
  * Parâmetros de qualidade/velocidade de cada codificador para cada objetivo.
  * Os valores foram escolhidos para que CPU e GPU mirem em qualidades parecidas,
  * assim o teste compara "maçã com maçã".
  */
 function tuning(e, goal) {
-  const x265log = ["-x265-params", "log-level=error"];
+  const x265log = ["-x265-params", lowMemory ? "log-level=error:frame-threads=1:pools=4:rc-lookahead=10" : "log-level=error"];
+  // Com pouca memória virtual, x264 usa menos threads e olha menos quadros à frente:
+  // gasta bem menos memória, ao custo de ficar um pouco mais lento.
+  const x264low = lowMemory ? ["-threads", "4", "-rc-lookahead", "10"] : [];
   const table = {
     libx264: {
-      speed: ["-preset", "veryfast", "-crf", "23"],
-      quality: ["-preset", "slow", "-crf", "18"],
-      size: ["-preset", "slow", "-crf", "26"],
+      speed: ["-preset", "veryfast", "-crf", "23", ...x264low],
+      quality: ["-preset", "slow", "-crf", "18", ...x264low],
+      size: ["-preset", "slow", "-crf", "26", ...x264low],
     },
     libx265: {
       speed: ["-preset", "fast", "-crf", "26", ...x265log],
@@ -88,4 +96,4 @@ function audioArgs(audioCodec) {
   return audioCodec === "aac" || audioCodec === "mp3" ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "192k"];
 }
 
-module.exports = { ENCODERS, find, decodeArgs, videoArgs, codecArgs, pixelFormat, audioArgs };
+module.exports = { ENCODERS, find, setLowMemory, isLowMemory, decodeArgs, videoArgs, codecArgs, pixelFormat, audioArgs };

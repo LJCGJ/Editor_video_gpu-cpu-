@@ -155,7 +155,7 @@ class Converter {
   runJob(args, onTime) {
     return new Promise((resolve, reject) => {
       if (this.cancelled) return reject(new Error(CANCELLED));
-      const child = spawn("ffmpeg", args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      const child = spawn(ffmpeg.bin("ffmpeg"), args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
       this.running.add(child);
       let stderr = "";
       let fps = 0;

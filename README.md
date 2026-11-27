@@ -8,10 +8,13 @@ só GPU, só CPU, ou as duas ao mesmo tempo, e explica o porquê.
   se não, padroniza resolução e taxa de quadros e escolhe GPU ou CPU para recodificar.
 - 📁 **Onde processar e salvar**: escolha em qual disco ficam os arquivos temporários e os vídeos prontos.
   Se o C: estiver cheio, o app sugere outro disco com um clique e confere o espaço antes de começar.
+- 💾 **Funciona sem usar o C:**: instale em outro disco e ligue o **modo portátil** para que preferências,
+  cache, logs, temporários, vídeos e até o FFmpeg fiquem fora do C:. O painel "O que usa o C:" mostra o que falta,
+  e o app avisa (e se adapta) quando a memória virtual do Windows está baixa.
 
 ## ⬇️ Download
 
-Baixe o instalador **`SmartRender-Setup-0.3.1.exe`** na página de
+Baixe o instalador **`SmartRender-Setup-0.4.0.exe`** na página de
 [**Releases**](https://github.com/LJCGJ/Editor_video_gpu-cpu-/releases/latest).
 
 - Instala só para o seu usuário, sem pedir senha de administrador.

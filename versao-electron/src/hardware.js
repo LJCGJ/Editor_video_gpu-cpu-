@@ -43,23 +43,31 @@ async function querySystem() {
   const fallback = { cpuName: os.cpus()[0]?.model?.trim() || "CPU", gpus: [] };
   if (process.platform !== "win32") return fallback;
 
-  const script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; " +
-    "$g=@(Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,AdapterRAM); " +
-    "$c=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name); " +
-    "@{gpus=$g; cpu=$c} | ConvertTo-Json -Compress -Depth 3";
+  // Placas de vídeo pelo registro (classe "Display"), sem WMI: o WMI pode travar e deixar a
+  // tela em "Detectando…" para sempre. O nome da CPU vem do próprio Node.
+  const script = String.raw`[Console]::OutputEncoding=[Text.Encoding]::UTF8
+$k = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'
+$g = @(Get-ChildItem $k -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\d{4}$' } | ForEach-Object {
+  $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+  if ($p.DriverDesc) { @{ Name = $p.DriverDesc; DriverVersion = $p.DriverVersion; Mem = $p.'HardwareInformation.qwMemorySize' } }
+})
+@{ gpus = $g } | ConvertTo-Json -Compress -Depth 3`;
   try {
-    const r = await ffmpeg.run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script]);
+    const r = await ffmpeg.run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { timeoutMs: 15000 });
+    if (r.timedOut) return fallback;
     const v = JSON.parse(r.stdout);
     const list = Array.isArray(v.gpus) ? v.gpus : v.gpus ? [v.gpus] : [];
+    const seen = new Set();
     const gpus = list
       .filter((g) => g.Name && !g.Name.startsWith("Microsoft")) // adaptadores virtuais não codificam vídeo
+      .filter((g) => !seen.has(g.Name) && seen.add(g.Name))
       .map((g) => ({
         name: g.Name.trim(),
         vendor: vendorOf(g.Name),
         driver: g.DriverVersion || "",
-        vramMb: Math.round((g.AdapterRAM || 0) / 1048576),
+        vramMb: Math.round((Number(g.Mem) || 0) / 1048576),
       }));
-    return { cpuName: (v.cpu || fallback.cpuName).trim(), gpus };
+    return { cpuName: fallback.cpuName, gpus };
   } catch {
     return fallback;
   }

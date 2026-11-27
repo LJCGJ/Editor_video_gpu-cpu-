@@ -6,14 +6,23 @@ const os = require("node:os");
 const path = require("node:path");
 
 const TEMP_PREFIX = "smartrender-";
+/**
+ * Pasta temporária "de fábrica", lida uma vez ao carregar o módulo: a do Windows, ou a do modo
+ * portátil (datadir.js troca o TEMP antes). Guardada porque depois o TEMP passa a apontar para a
+ * pasta de trabalho, e é preciso saber para onde voltar quando o usuário escolhe "Usar o padrão".
+ */
+const DEFAULT_TEMP = os.tmpdir();
 
 let settings = { workDir: null, outputDir: null };
 
 function configure(next) {
   settings = { ...settings, ...next };
+  // FFmpeg, PowerShell e o próprio Node passam a usar a pasta de trabalho como TEMP:
+  // assim nada do processamento cai na pasta temporária do Windows (no C:).
+  process.env.TEMP = process.env.TMP = workDir();
 }
 
-/** Pasta de trabalho escolhida pelo usuário, ou a pasta temporária do Windows. */
+/** Pasta de trabalho escolhida pelo usuário, ou a temporária padrão. */
 function workDir() {
   if (settings.workDir) {
     try {
@@ -23,8 +32,10 @@ function workDir() {
       // Pasta inacessível (pendrive removido, disco desconectado): volta para o padrão.
     }
   }
-  return os.tmpdir();
+  return DEFAULT_TEMP;
 }
+
+const defaultTemp = () => DEFAULT_TEMP;
 
 /** Pasta onde salvar os vídeos prontos, ou null para "ao lado do vídeo original". */
 function outputDir() {
@@ -90,7 +101,7 @@ function removeTemp(dir) {
 
 /** Remove pastas temporárias esquecidas por execuções anteriores (nunca as que estão em uso). */
 function cleanupLeftovers() {
-  for (const base of new Set([workDir(), os.tmpdir()])) {
+  for (const base of new Set([workDir(), DEFAULT_TEMP, os.tmpdir()])) {
     let entries = [];
     try {
       entries = fs.readdirSync(base, { withFileTypes: true });
@@ -140,4 +151,4 @@ function ensureSpace(dir, needBytes, what) {
   );
 }
 
-module.exports = { configure, workDir, outputDir, makeTemp, removeTemp, cleanupLeftovers, driveOf, diskSpace, listDrives, ensureSpace };
+module.exports = { configure, workDir, defaultTemp, outputDir, makeTemp, removeTemp, cleanupLeftovers, driveOf, diskSpace, listDrives, ensureSpace };

@@ -1,25 +1,35 @@
-// Preferências do usuário (pastas de trabalho e de saída), guardadas num JSON pequeno.
+// Preferências do usuário (pastas de trabalho, de saída e do FFmpeg), guardadas num JSON pequeno
+// dentro da pasta de dados do app (%APPDATA% ou, no modo portátil, a pasta escolhida).
 
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const paths = require("./paths");
+const ffmpeg = require("./ffmpeg");
 
 let file = null;
-let current = { workDir: null, outputDir: null };
+let current = { workDir: null, outputDir: null, ffmpegDir: null };
 let saved = false;
+/** FFmpeg levado junto com o programa (ex.: D:\SmartRender\ffmpeg), usado se nenhum for escolhido. */
+let bundledFfmpeg = null;
+
+function applyAll() {
+  paths.configure(current);
+  ffmpeg.configure({ ffmpegDir: current.ffmpegDir || bundledFfmpeg });
+}
 
 /** Lê as preferências e aplica as pastas. `dir` é a pasta de dados do app. */
-function load(dir) {
+function load(dir, programDir) {
   file = path.join(dir, "settings.json");
+  const candidate = programDir && path.join(programDir, "ffmpeg");
+  bundledFfmpeg = candidate && fs.existsSync(path.join(candidate, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg")) ? candidate : null;
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    current = { workDir: data.workDir || null, outputDir: data.outputDir || null };
+    current = { workDir: data.workDir || null, outputDir: data.outputDir || null, ffmpegDir: data.ffmpegDir || null };
     saved = true;
   } catch {
     saved = false;
   }
-  paths.configure(current);
+  applyAll();
   return current;
 }
 
@@ -35,15 +45,16 @@ function assertWritable(dir, label) {
   }
 }
 
-function save(next) {
+async function save(next) {
   const merged = { ...current, ...next };
   if (merged.workDir) assertWritable(merged.workDir, "pasta de trabalho");
   if (merged.outputDir) assertWritable(merged.outputDir, "pasta de saída");
+  if (next.ffmpegDir) await ffmpeg.validateDir(next.ffmpegDir);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(merged, null, 2));
   current = merged;
   saved = true;
-  paths.configure(current);
+  applyAll();
   return current;
 }
 
@@ -56,9 +67,12 @@ function describe() {
     workDir: work,
     workDirCustom: !!current.workDir,
     workSpace: paths.diskSpace(work),
-    systemTemp: os.tmpdir(),
+    systemTemp: paths.defaultTemp(),
     outputDir: out,
     outputSpace: out ? paths.diskSpace(out) : null,
+    ffmpegPath: ffmpeg.location(),
+    ffmpegCustom: !!current.ffmpegDir,
+    ffmpegBundled: !current.ffmpegDir && !!bundledFfmpeg,
     drives: paths.listDrives(),
   };
 }

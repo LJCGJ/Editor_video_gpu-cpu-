@@ -1,5 +1,9 @@
 const path = require("node:path");
+const { spawn } = require("node:child_process");
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+// O modo portátil precisa ser aplicado antes de tudo: a pasta de dados (e o TEMP) não muda depois.
+const datadir = require("./src/datadir");
+const dataInfo = datadir.apply(app);
 const hardware = require("./src/hardware");
 const probe = require("./src/probe");
 const benchmark = require("./src/benchmark");
@@ -7,9 +11,12 @@ const join = require("./src/join");
 const { Converter, defaultOutputPath } = require("./src/convert");
 const settings = require("./src/settings");
 const paths = require("./src/paths");
+const system = require("./src/system");
 
 let win;
 let hw = null;
+let lastVideoDir = null;
+let oldDataRemoved = false;
 const send = (event, payload) => win?.webContents.send(event, payload);
 const converter = new Converter(send);
 
@@ -25,11 +32,15 @@ function handle(channel, fn) {
 }
 
 handle("detect-hardware", async () => (hw = await hardware.detect()));
-handle("analyze-video", (file) => probe.analyze(file));
+/** Hardware já detectado, ou detecta agora (ex.: logo depois de trocar o FFmpeg). */
+const ensureHardware = async () => hw || (hw = await hardware.detect());
+handle("analyze-video", (file) => {
+  lastVideoDir = path.dirname(file);
+  return probe.analyze(file);
+});
 handle("default-output-path", (file, suffix) => defaultOutputPath(file, suffix));
-handle("plan-join", ({ clips, codec, goal }) => {
-  if (!hw) throw new Error("O hardware ainda não foi detectado.");
-  return join.plan(hw, clips, codec, goal, (p) => send("benchmark-progress", p));
+handle("plan-join", async ({ clips, codec, goal }) => {
+  return join.plan(await ensureHardware(), clips, codec, goal, (p) => send("benchmark-progress", p));
 });
 handle("start-join", ({ clips, plan, goal, outPath }) => converter.startJoin(clips, plan, goal, outPath));
 handle("open-videos", async (extensions) => {
@@ -39,9 +50,8 @@ handle("open-videos", async (extensions) => {
   });
   return r.canceled ? [] : r.filePaths;
 });
-handle("run-benchmark", ({ video, codec, goal }) => {
-  if (!hw) throw new Error("O hardware ainda não foi detectado.");
-  return benchmark.run(hw, video, codec, goal, (p) => send("benchmark-progress", p));
+handle("run-benchmark", async ({ video, codec, goal }) => {
+  return benchmark.run(await ensureHardware(), video, codec, goal, (p) => send("benchmark-progress", p));
 });
 handle("start-conversion", ({ video, option, goal, outPath }) => converter.start(video, option, goal, outPath));
 handle("cancel-conversion", () => converter.cancel());
@@ -54,11 +64,43 @@ handle("choose-output", async (defaultPath) => {
   const r = await dialog.showSaveDialog(win, { defaultPath, filters: [{ name: "Vídeo MP4", extensions: ["mp4"] }] });
   return r.canceled ? null : r.filePath;
 });
-handle("get-settings", () => settings.describe());
-handle("set-settings", (next) => {
-  settings.save(next);
+/** Pastas, FFmpeg, modo portátil, memória virtual e o relatório do que ainda usa o C:. */
+async function describeAll() {
+  const mem = await system.memory();
+  const programDir = app.isPackaged ? path.dirname(process.execPath) : null;
+  return {
+    ...settings.describe(),
+    data: { ...dataInfo, oldDataRemoved, packaged: app.isPackaged, programDir },
+    memory: mem,
+    usage: system.usage(
+      { programDir, dataDir: dataInfo.dataDir, portable: dataInfo.portable, lastVideoDir },
+      mem
+    ),
+  };
+}
+
+handle("get-settings", describeAll);
+handle("set-settings", async (next) => {
+  await settings.save(next);
+  // Trocar o FFmpeg muda quais codificadores existem: a interface detecta o hardware de novo.
+  if ("ffmpegDir" in next) hw = null;
   paths.cleanupLeftovers();
-  return settings.describe();
+  return describeAll();
+});
+/** Liga (dir) ou desliga (null) o modo portátil e reinicia o app para valer. */
+handle("move-data", (dir) => {
+  if (converter.busy) throw new Error("Espere a conversão terminar antes de mover os dados do app.");
+  if (dir) datadir.enable(app, dir);
+  else datadir.disable(app);
+  setTimeout(() => {
+    app.relaunch();
+    app.exit(0);
+  }, 400);
+  return true;
+});
+handle("open-memory-settings", () => {
+  // Abre "Opções de desempenho" do Windows; a aba "Avançado" tem o botão da memória virtual.
+  spawn("SystemPropertiesPerformance.exe", [], { detached: true, stdio: "ignore" }).unref();
 });
 handle("choose-folder", async (defaultPath) => {
   const r = await dialog.showOpenDialog(win, { defaultPath, properties: ["openDirectory", "createDirectory"] });
@@ -114,7 +156,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  settings.load(app.getPath("userData"));
+  settings.load(app.getPath("userData"), datadir.baseDir(app));
+  // No modo portátil, o cache antigo em %APPDATA% (no C:) não serve mais: libera o espaço.
+  oldDataRemoved = datadir.removeOldDefault();
   // Apaga pastas temporárias que ficaram presas em execuções anteriores.
   paths.cleanupLeftovers();
   createWindow();

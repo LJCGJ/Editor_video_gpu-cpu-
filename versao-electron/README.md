@@ -20,7 +20,7 @@ Requisito extra: [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 npm run installer
 ```
 
-O instalador sai em `dist/SmartRender-Setup-0.3.1.exe`. Ele instala só para o usuário atual (sem pedir senha de
+O instalador sai em `dist/SmartRender-Setup-0.4.0.exe`. Ele instala só para o usuário atual (sem pedir senha de
 administrador), cria atalhos e desinstalador, e avisa no final se o FFmpeg não estiver instalado.
 O FFmpeg não vai embutido: ocuparia mais de 400 MB e exigiria cumprir a licença GPL ao distribuir.
 
@@ -61,6 +61,29 @@ O app mostra o espaço livre de cada disco e, se o disco da pasta de trabalho es
 com bem mais folga, oferece **"Usar D:\SmartRender para tudo"**. Antes de converter ou juntar, confere se há
 espaço suficiente. Pastas temporárias que tenham ficado presas (arquivo travado pelo antivírus, por exemplo)
 são apagadas na próxima abertura do app.
+
+## Funcionar sem usar o disco C: (`src/datadir.js`, `src/system.js`)
+
+Para máquinas com o C: pequeno ou cheio, tudo pode ficar em outra unidade:
+
+| O que | Como tirar do C: |
+|---|---|
+| O programa | O instalador pergunta a pasta e sugere o disco com mais espaço quando o C: tem menos de 10 GB livres |
+| Preferências, cache do navegador interno e logs | **Modo portátil**: no instalador (opção marcada quando a pasta não é no C:) ou em "Dados do app → Mover…". Fica tudo em `<pasta>\dados` |
+| Temporários do processamento | "Arquivos temporários" (também vira o TEMP do FFmpeg e do PowerShell) |
+| Vídeos prontos | "Vídeos prontos" |
+| FFmpeg | "FFmpeg → Alterar…", ou copie `ffmpeg.exe` e `ffprobe.exe` para `<programa>\ffmpeg` |
+
+O modo portátil é ligado por um arquivo `pasta-de-dados.txt` ao lado do executável (vazio = `<programa>\dados`;
+com um caminho dentro = aquela pasta). Ao ligar, as preferências são copiadas e o cache antigo em `%APPDATA%` é apagado.
+
+O painel **"O que o SmartRender usa no disco C:"** lista cada item e onde está.
+
+**Memória virtual:** o arquivo de paginação do Windows (`pagefile.sys`) fica no C: e o app não pode movê-lo.
+Quando sobra pouca memória virtual (menos de 3 GB), os codificadores de CPU passam a usar configurações mais
+econômicas (menos threads e lookahead menor) e a seção de pastas mostra um aviso com o passo a passo para
+mover o arquivo de paginação para outro disco. A memória é lida pela API `GlobalMemoryStatusEx` e o hardware
+pelo registro, sem WMI, que pode travar em máquinas com problemas.
 
 ## Vídeos nunca ficam "pela metade" com cara de prontos
 

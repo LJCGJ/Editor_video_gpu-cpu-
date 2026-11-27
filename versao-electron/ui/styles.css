@@ -156,7 +156,22 @@ button.icon:disabled { opacity: .35; cursor: default; }
 .folder-info .label { font-size: 12px; color: var(--muted); }
 .folder-path { font-weight: 600; word-break: break-all; }
 .small-line { font-size: 12.5px; }
-.folder-actions { display: flex; gap: 6px; flex: none; }
+.folder-actions { display: flex; gap: 6px; flex: none; flex-wrap: wrap; }
+.warn-text { color: var(--warn); }
+.folder-alert.memory { margin: 8px 0 0; align-items: flex-start; }
+details.guide { margin-top: 6px; font-size: 13px; }
+details.guide summary, details.usage summary { cursor: pointer; font-weight: 600; }
+details.guide ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 3px; }
+details.guide code, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+details.usage { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details.usage table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+details.usage td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+details.usage td:first-child { width: 24px; }
+details.usage td.mono { word-break: break-all; color: var(--muted); }
+details.usage .muted { font-size: 12px; }
+.pill { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.pill.ok { background: var(--gpu-soft); color: var(--gpu); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
 
 /* Drop zone */
 .drop {

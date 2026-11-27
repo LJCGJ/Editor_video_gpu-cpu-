@@ -10,6 +10,7 @@ const ffmpeg = require("./ffmpeg");
 const encoders = require("./encoders");
 const recommend = require("./recommend");
 const paths = require("./paths");
+const system = require("./system");
 
 const SAMPLE_SECONDS = 5;
 const AUDIO_KBPS = 192;
@@ -23,15 +24,21 @@ async function run(hw, video, codec, goal, onProgress = () => {}) {
 
   // O teste grava alguns trechos curtos (dezenas de MB) na pasta de trabalho.
   paths.ensureSpace(paths.workDir(), 300 * 1048576, "o teste de 5 segundos");
+  // Com pouca memória virtual, os codificadores de CPU passam a usar menos memória.
+  // O modo vale também para a conversão que vier depois deste teste.
+  const mem = await system.memory();
+  encoders.setLowMemory(mem.low);
   const tmp = paths.makeTemp("teste");
   try {
-    return await runIn(tmp, candidates, video, codec, goal, onProgress);
+    return await runIn(tmp, candidates, video, codec, goal, onProgress, mem);
   } finally {
     paths.removeTemp(tmp);
   }
 }
 
-async function runIn(tmp, candidates, video, codec, goal, onProgress) {
+const gbText = (b) => `${(b / 1073741824).toFixed(1).replace(".", ",")} GB`;
+
+async function runIn(tmp, candidates, video, codec, goal, onProgress, mem) {
   const wanted = Math.min(video.duration, SAMPLE_SECONDS);
   // Trecho do meio do vídeo: o começo costuma ter tela preta ou vinheta, o que distorce o teste.
   const start = await keyframeNear(video, Math.max(0, (video.duration - wanted) / 2), wanted);
@@ -45,6 +52,12 @@ async function runIn(tmp, candidates, video, codec, goal, onProgress) {
   const notes = [];
   if (!has("gpu")) notes.push("Nenhuma GPU com codificador para este formato foi encontrada: só a CPU foi testada.");
   if (codec === "av1" && has("gpu") && has("cpu")) notes.push("O modo GPU + CPU juntas ainda não está disponível para AV1.");
+  if (mem.low) {
+    notes.push(
+      `Pouca memória virtual livre (${gbText(mem.freeVirtual)}): os codificadores de CPU estão usando menos memória, ` +
+        "o que pode deixá-los um pouco mais lentos. Veja em \"Onde processar e salvar\" como resolver."
+    );
+  }
 
   const singles = [];
   for (const [i, e] of candidates.entries()) {
@@ -56,7 +69,8 @@ async function runIn(tmp, candidates, video, codec, goal, onProgress) {
       const { ssim, db } = (await measureSsim(out, video, sample)) || { ssim: 0, db: 0 };
       singles.push({ enc: e, fps, overhead: fixedCost(run, fps), ssim, db, bytes: fs.statSync(out).size });
     } catch (err) {
-      notes.push(`${e.label} falhou neste vídeo e foi descartado (${err.message}).`);
+      const memoryHint = e.device === "cpu" && mem.low ? " Provavelmente por falta de memória virtual." : "";
+      notes.push(`${e.label} falhou neste vídeo e foi descartado (${err.message}).${memoryHint}`);
     }
   }
   if (!singles.length) throw new Error("Nenhum codificador conseguiu processar este vídeo.");
@@ -134,7 +148,7 @@ function encodeSample(video, sample, e, goal, out) {
     const t0 = performance.now();
     const now = () => (performance.now() - t0) / 1000;
     const timeline = [];
-    const child = spawn("ffmpeg", a, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(ffmpeg.bin("ffmpeg"), a, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (d) => (stderr += d));
     readline.createInterface({ input: child.stdout }).on("line", (line) => {

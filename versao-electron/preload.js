@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld("api", {
   getSettings: () => call("get-settings"),
   setSettings: (next) => call("set-settings", next),
   chooseFolder: (defaultPath) => call("choose-folder", defaultPath),
+  moveData: (dir) => call("move-data", dir),
+  openMemorySettings: () => call("open-memory-settings"),
   planJoin: (req) => call("plan-join", req),
   startJoin: (req) => call("start-join", req),
   runBenchmark: (req) => call("run-benchmark", req),
